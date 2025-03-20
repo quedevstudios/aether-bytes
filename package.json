@@ -1,0 +1,110 @@
+{
+  "name": "aether-bytes",
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Library generator that transforms template documents into callable Base64-encoded strings with type definitions, making them easily accessible and structured for seamless integration.",
+  "author": {
+    "name": "Blaque Allen",
+    "email": "187586952+quedevstudios@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/quedevstudios/aether-bytes",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quedevstudios/aether-bytes.git"
+  },
+  "bugs": {
+    "url": "https://github.com/quedevstudios/aether-bytes/issues"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
+  "keywords": [
+    "base64",
+    "templates",
+    "encoder",
+    "typescript",
+    "library",
+    "converter",
+    "embedded",
+    "assets"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.umd.cjs"
+    }
+  },
+  "main": "./dist/index.umd.cjs",
+  "module": "./dist/index.esm.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "dev": "bun run ./src-lib/index.ts",
+    "builder": "rollup --config rollup.config.ts --configPlugin @rollup/plugin-typescript",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "release": "semantic-release",
+    "prepare:git-hooks": "simple-git-hooks",
+    "prepare": "bun prepare:git-hooks"
+  },
+  "peerDependencies": {
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@antfu/eslint-config": "^4.10.1",
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@semantic-release/git": "^10.0.1",
+    "@types/bun": "^1.2.5",
+    "eslint": "^9.22.0",
+    "lint-staged": "^15.5.0",
+    "rollup": "^4.36.0",
+    "rollup-plugin-dts": "^6.1.1",
+    "semantic-release": "^24.2.3",
+    "simple-git-hooks": "^2.11.1"
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "simple-git-hooks": {
+    "pre-commit": "bunx lint-staged",
+    "commit-msg": "bunx commitlint --edit ${1}"
+  },
+  "lint-staged": {
+    "*": "bunx eslint --fix"
+  },
+  "release": {
+    "branches": [
+      "master"
+    ],
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/npm",
+      [
+        "@semantic-release/git",
+        {
+          "assets": [
+            "package.json"
+          ],
+          "message": "chore(release): v${nextRelease.version}\n\n${nextRelease.notes}"
+        }
+      ],
+      [
+        "@semantic-release/github",
+        {
+          "assets": []
+        }
+      ]
+    ]
+  }
+}

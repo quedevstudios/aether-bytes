@@ -1,0 +1,20 @@
+// https://docs.renovatebot.com/configuration-options/
+{
+
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "America/New_York",
+  "packageRules": [
+    {
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "groupName": "all dependencies",
+      "schedule": ["at any time"]
+    }
+  ],
+  "automerge": false,
+  "rangeStrategy": "bump",
+  "commitMessagePrefix": "chore(deps): ",
+  "labels": ["dependencies"],
+  "prHourlyLimit": 5,
+  "prConcurrentLimit": 10
+}
