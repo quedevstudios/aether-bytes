@@ -1,7 +1,7 @@
 {
   "name": "aether-bytes",
   "type": "module",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "Library generator that transforms template documents into callable Base64-encoded strings with type definitions, making them easily accessible and structured for seamless integration.",
   "author": {
     "name": "Blaque Allen",
@@ -96,7 +96,7 @@
           "assets": [
             "package.json"
           ],
-          "message": "chore(release): v${nextRelease.version}\n\n${nextRelease.notes}"
+          "message": "chore(release): v${nextRelease.version} [skip ci]"
         }
       ],
       [

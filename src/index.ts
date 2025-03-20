@@ -275,7 +275,7 @@ export class AetherBytes {
           return ""
         }
 
-        let type = `export type ${this.toPascalCase(entry.name)} = {
+        let type = `export interface ${this.toPascalCase(entry.name)} {
 ${Object.entries(entry.types)
   .map(([key, value]) => `  ${key}: ${value};`)
   .join("\n")}
@@ -307,6 +307,11 @@ ${entries
    * @returns A promise that resolves when the writing is completed
    */
   public async write(destination: string, options?: WriteOptions): Promise<string | undefined> {
+    if (this.entries.length === 0) {
+      this.emit("error", { message: "No entries to write" })
+      return undefined
+    }
+
     const filename = options?.filename || "index"
     const ext = options?.type || "ts"
     const filepath = join(destination, `${filename}.${ext}`)
