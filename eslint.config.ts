@@ -7,4 +7,8 @@ export default antfu({
     indent: 2,
     quotes: "double",
   },
+
+  rules: {
+    "node/prefer-global/buffer": "off",
+  },
 })

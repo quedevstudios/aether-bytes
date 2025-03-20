@@ -18,6 +18,7 @@ export default defineConfig([
         format: "esm",
       },
     ],
+    external: id => id.startsWith("node:"),
     plugins: [
       pluginTypescript(),
       pluginTerser(),
@@ -31,6 +32,7 @@ export default defineConfig([
         format: "esm",
       },
     ],
+    external: id => id.startsWith("node:"),
     plugins: [
       pluginTypescript(),
       pluginDTS(),

@@ -43,7 +43,7 @@
     "dist/**/*"
   ],
   "scripts": {
-    "dev": "bun run ./src-lib/index.ts",
+    "dev": "bun run ./src/index.ts",
     "builder": "rollup --config rollup.config.ts --configPlugin @rollup/plugin-typescript",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
