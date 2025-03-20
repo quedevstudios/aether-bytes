@@ -1,4 +1,3 @@
-import { EventEmitter } from "node:events"
 import {
   mkdir,
   readdir,
@@ -7,6 +6,16 @@ import {
   writeFile,
 } from "node:fs/promises"
 import { extname, join, sep } from "node:path"
+
+/**
+ * Event types
+ */
+export interface EventTypes {
+  analyzed: { message: string, entry: Entry }
+  loaded: { message: string, files: number }
+  error: { message: string, error?: unknown }
+  complete: { message: string, output: string }
+}
 
 /**
  * Options for loading files
@@ -64,10 +73,34 @@ export interface Entry {
 
 /**
  * AetherBytes is a class that analyzes files, extracts variables, and generates a TypeScript or JavaScript file
- * with the results. It extends EventEmitter to allow for event-driven programming.
+ * with the results.
  */
-export class AetherBytes extends EventEmitter {
+export class AetherBytes {
+  private events: { [K in keyof EventTypes]?: ((data: EventTypes[K]) => void)[] } = {}
   private entries: Entry[] = []
+
+  /**
+   * Register an event listener.
+   * @param event - The event name.
+   * @param callback - The callback function.
+   */
+  public on<K extends keyof EventTypes>(event: K, callback: (data: EventTypes[K]) => void): void {
+    if (!this.events[event]) {
+      this.events[event] = []
+    }
+    this.events[event]!.push(callback)
+  }
+
+  /**
+   * Emit an event and call all registered listeners.
+   * @param event - The event name.
+   * @param data - The data associated with the event.
+   */
+  private emit<K extends keyof EventTypes>(event: K, data: EventTypes[K]): void {
+    if (this.events[event]) {
+      this.events[event]!.forEach(callback => callback(data))
+    }
+  }
 
   /**
    * Get the entries array which contains all analyzed file entries
@@ -104,7 +137,7 @@ export class AetherBytes extends EventEmitter {
 
       const entry: Entry = { name, ext, path: filepath, content, base64, types }
 
-      this.emit("data", entry)
+      this.emit("analyzed", { message: `Analyzed file ${filepath}`, entry })
 
       if (push) {
         this.entries.push(entry)
@@ -113,7 +146,7 @@ export class AetherBytes extends EventEmitter {
       return entry
     }
     catch (error) {
-      this.emit("error", `Error analyzing file ${filepath}: ${error}`)
+      this.emit("error", { message: `Error analyzing file ${filepath}`, error })
       throw error
     }
   }
@@ -137,7 +170,7 @@ export class AetherBytes extends EventEmitter {
       }
     }
     catch (error) {
-      this.emit("error", `Error reading directory ${directory}: ${error}`)
+      this.emit("error", { message: `Error reading directory ${directory}`, error })
     }
 
     return files
@@ -170,28 +203,42 @@ export class AetherBytes extends EventEmitter {
           }
         }
         catch (error) {
-          this.emit("error", `Error accessing ${src}: ${error}`)
+          this.emit("error", { message: `Error accessing source ${src}`, error })
         }
       }
 
       // Handle if ext in both include and exclude
       if (options?.includeExt && options?.excludeExt) {
-        const intersection = options.includeExt.filter(ext => options.excludeExt?.includes(ext))
+        const normalize = (ext: string): string => ext.replace(/^\./, "")
+        const includeExtNormalized = options.includeExt.map(normalize)
+        const excludeExtNormalized = options.excludeExt.map(normalize)
+
+        const intersection = includeExtNormalized.filter(ext => excludeExtNormalized.includes(ext))
+
         if (intersection.length > 0) {
-          this.emit("error", `Extensions ${intersection.join(", ")} are in both include and exclude`)
+          this.emit("error", { message: `Conflicting include and exclude extensions: ${intersection.join(", ")}` })
           return
         }
       }
 
       // Apply filters
       files = files.filter((file) => {
-        const ext = extname(file).slice(1)
-        if (options?.includeExt && !options.includeExt.includes(ext)) {
-          return false
+        const ext = extname(file).replace(/^\./, "")
+
+        if (options?.includeExt) {
+          const normalizedIncludeExt = options.includeExt.map(e => e.replace(/^\./, ""))
+          if (!normalizedIncludeExt.includes(ext)) {
+            return false
+          }
         }
-        if (options?.excludeExt && options.excludeExt.includes(ext)) {
-          return false
+
+        if (options?.excludeExt) {
+          const normalizedExcludeExt = options.excludeExt.map(e => e.replace(/^\./, ""))
+          if (normalizedExcludeExt.includes(ext)) {
+            return false
+          }
         }
+
         return true
       })
 
@@ -199,10 +246,10 @@ export class AetherBytes extends EventEmitter {
         await this.analyze(file, true)
       }
 
-      this.emit("done", { message: "Loading completed", files: this.entries.length })
+      this.emit("loaded", { message: "Loading completed", files: this.entries.length })
     }
     catch (error) {
-      this.emit("error", `Error loading files: ${error}`)
+      this.emit("error", { message: `Error loading files`, error })
     }
   }
 
@@ -277,12 +324,12 @@ ${entries
       mkdir(destination, { recursive: true })
 
       await writeFile(filepath, typeFileContent)
-      this.emit("done", { message: "Conversion completed", output: filepath })
+      this.emit("complete", { message: "Library completed", output: filepath })
 
       return filepath
     }
     catch (error) {
-      this.emit("error", `Error converting files:: ${error}`)
+      this.emit("error", { message: `Error writing file ${filepath}`, error })
       return undefined
     }
   }

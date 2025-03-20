@@ -50,7 +50,7 @@ describe("AetherBytes", () => {
       const aetherBytes = new AetherBytes()
 
       let eventData
-      aetherBytes.on("done", (data) => {
+      aetherBytes.on("loaded", (data) => {
         eventData = data
       })
 
@@ -63,7 +63,7 @@ describe("AetherBytes", () => {
       const aetherBytes = new AetherBytes()
 
       let eventData
-      aetherBytes.on("done", (data) => {
+      aetherBytes.on("loaded", (data) => {
         eventData = data
       })
 
@@ -81,14 +81,14 @@ describe("AetherBytes", () => {
     test("should handle conflicting include and exclude filters", async () => {
       const aetherBytes = new AetherBytes()
 
-      let eventData: string = ""
+      let eventData
       aetherBytes.on("error", (data) => {
         eventData = data
       })
 
-      await aetherBytes.load(TEMPLATE_DIR, { includeExt: ["md"], excludeExt: ["md"] })
+      await aetherBytes.load(TEMPLATE_DIR, { includeExt: [".md"], excludeExt: ["md"] })
 
-      expect(eventData).toBe("Extensions md are in both include and exclude")
+      expect(eventData).toMatchObject({ message: "Conflicting include and exclude extensions: md" })
     })
   })
 
