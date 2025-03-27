@@ -263,7 +263,7 @@ export class AetherBytes {
       })
 
       for (const file of files) {
-        await this.analyze(file, true)
+        await this.analyze(file, true, options?.compress)
       }
 
       this.emit("loaded", { message: "Loading completed", files: this.entries.length })
@@ -366,8 +366,13 @@ ${entries
  * @param encoded - The encoded string
  * @returns A promise that resolves to the decoded string
  */
-export async function decoder(encoded: string): Promise<string> {
-  const compressedBuffer = Buffer.from(encoded, "base64")
-  const decompressedBuffer = await gunzipAsync(compressedBuffer)
-  return decompressedBuffer.toString("utf-8")
+export async function decoder(encoded: string, compressed: boolean = false): Promise<string> {
+  const buffer = Buffer.from(encoded, "base64")
+
+  if (compressed) {
+    const decompressedBuffer = await gunzipAsync(buffer)
+    return decompressedBuffer.toString("utf-8")
+  }
+
+  return buffer.toString("utf-8")
 }

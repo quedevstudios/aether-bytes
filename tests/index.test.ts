@@ -59,7 +59,7 @@ describe("AetherBytes", () => {
     })
 
     test("should decompress encoded", async () => {
-      const analysis = await decoder(previousEncoded)
+      const analysis = await decoder(previousEncoded, true)
 
       expect(analysis).not.toBe(previousEncoded)
     })
