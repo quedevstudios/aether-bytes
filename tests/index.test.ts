@@ -2,7 +2,7 @@ import { readdir, rm } from "node:fs/promises"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { afterAll, describe, expect, test } from "bun:test"
-import { AetherBytes } from "../src"
+import { AetherBytes, decoder } from "../src"
 
 const TEMP_DIR = "./tests/.temp"
 const TEMPLATE_DIR = "./tests/templates"
@@ -29,19 +29,39 @@ describe("AetherBytes", () => {
   })
 
   describe("analyze", () => {
+    let previousEncoded: string
+
     test("should analyze file", async () => {
       const aetherBytes = new AetherBytes()
       const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
       const analysis = await aetherBytes.analyze(filepath)
+
+      previousEncoded = analysis.encoded
 
       expect(analysis).toMatchObject({
         name: TEMPLATE_FILES[0]?.split(".")[0],
         ext: TEMPLATE_FILES[0]?.split(".")[1],
         path: filepath,
         content: expect.any(String),
-        base64: expect.any(String),
+        encoded: expect.any(String),
         types: expect.any(Object),
       })
+    })
+
+    test("should compress encoded", async () => {
+      const aetherBytes = new AetherBytes()
+      const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
+      const analysis = await aetherBytes.analyze(filepath, false, true)
+
+      expect(analysis.encoded).not.toBe(previousEncoded)
+
+      previousEncoded = analysis.encoded
+    })
+
+    test("should decompress encoded", async () => {
+      const analysis = await decoder(previousEncoded)
+
+      expect(analysis).not.toBe(previousEncoded)
     })
   })
 
@@ -124,5 +144,5 @@ describe("AetherBytes", () => {
 })
 
 afterAll(async () => {
-  await rm(TEMP_DIR, { recursive: true, force: true })
+  // await rm(TEMP_DIR, { recursive: true, force: true })
 })

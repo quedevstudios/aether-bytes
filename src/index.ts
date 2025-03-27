@@ -1,3 +1,4 @@
+import type { ZlibOptions } from "node:zlib"
 import {
   mkdir,
   readdir,
@@ -6,6 +7,11 @@ import {
   writeFile,
 } from "node:fs/promises"
 import { extname, join, sep } from "node:path"
+import { promisify } from "node:util"
+import { gunzip, gzip } from "node:zlib"
+
+const gzipAsync = promisify(gzip)
+const gunzipAsync = promisify(gunzip)
 
 /**
  * Event types
@@ -22,10 +28,12 @@ export interface EventTypes {
  *
  * @includeExt - Array of file extensions to include (e.g. ['js', 'ts'])
  * @excludeExt - Array of file extensions to exclude (e.g. ['json', 'txt'])
+ * @compress - Boolean to compress or options object
  */
 export interface LoadOptions {
   includeExt?: string[]
   excludeExt?: string[]
+  compress?: boolean | ZlibOptions
 }
 
 /**
@@ -59,7 +67,7 @@ export type EntryTypes =
  * @property {string} ext - The file extension
  * @property {string} path - The full path to the file
  * @property {string} content - The content of the file
- * @property {string} base64 - The base64 encoded content of the file
+ * @property {string} encoded - The encoded content of the file
  * @property {EntryTypes} types - An object representing the types of variables found in the file
  */
 export interface Entry {
@@ -67,7 +75,7 @@ export interface Entry {
   ext: string
   path: string
   content: string
-  base64: string
+  encoded: string
   types: EntryTypes
 }
 
@@ -118,13 +126,25 @@ export class AetherBytes {
    * @param {boolean} push - Whether to push the entry to the entries array (default: false)
    * @returns A promise that resolves to the analyzed entry object
    */
-  public async analyze(filepath: string, push?: boolean): Promise<Entry> {
+  public async analyze(filepath: string, push?: boolean, compress?: boolean | ZlibOptions): Promise<Entry> {
     try {
       const name = filepath.split(sep).pop()?.split(".")[0] || ""
       const ext = extname(filepath).slice(1)
       const content = await readFile(filepath, "utf-8")
 
-      const base64 = Buffer.from(content).toString("base64")
+      // Compress content
+      let encoded: string
+
+      if (compress) {
+        const compressedBuffer = await gzipAsync(
+          content,
+          typeof compress !== "boolean" ? compress as ZlibOptions : undefined,
+        )
+        encoded = compressedBuffer.toString("base64")
+      }
+      else {
+        encoded = Buffer.from(content).toString("base64")
+      }
 
       // Scan for variables inside {} and map them to key, and rest as string
       const matches = content.match(/\{\{\s*(\w+)\s*\}\}|\{(\w+)\}/g) || []
@@ -135,7 +155,7 @@ export class AetherBytes {
         return acc
       }, {} as EntryTypes)
 
-      const entry: Entry = { name, ext, path: filepath, content, base64, types }
+      const entry: Entry = { name, ext, path: filepath, content, encoded, types }
 
       this.emit("analyzed", { message: `Analyzed file ${filepath}`, entry })
 
@@ -293,7 +313,7 @@ ${Object.entries(entry.types)
 ${entries
   .map(
     entry =>
-      `  "${entry.name}": \"${entry.base64}\"`,
+      `  "${entry.name}": \"${entry.encoded}\"`,
   )
   .join(",\n")}
 };`
@@ -338,4 +358,16 @@ ${entries
       return undefined
     }
   }
+}
+
+/**
+ * Decode an encoded string
+ *
+ * @param encoded - The encoded string
+ * @returns A promise that resolves to the decoded string
+ */
+export async function decoder(encoded: string): Promise<string> {
+  const compressedBuffer = Buffer.from(encoded, "base64")
+  const decompressedBuffer = await gunzipAsync(compressedBuffer)
+  return decompressedBuffer.toString("utf-8")
 }
