@@ -235,13 +235,13 @@ export class AetherBytes {
   public async decompress(options?: DecompressOptions): Promise<Entry[]> {
     for (const entry of this.entries) {
       try {
-        if (!(entry.data instanceof Uint8Array)) {
+        if (!entry.data) {
           continue
         }
 
-        const decompressedContent = await decompressor(entry.data as Uint8Array, options)
+        const decompressedContent = await decompressor(entry.data, options)
 
-        entry.data = decompressedContent.toString()
+        entry.data = decompressedContent
         entry.compressed = false
 
         this.emit("compression", { message: `Decompressed file ${entry.path}`, data: entry.data })
@@ -294,11 +294,11 @@ export class AetherBytes {
 /**
  * Decompresses the loaded entries using the specified algorithm.
  *
- * @param data - The data to be decompressed as a `Uint8Array`.
+ * @param data - The data to be decompressed as a string.
  * @param options - Options for decompression.
  * @returns A promise resolving to an array of loaded {@link Entry} objects with
  *          decompressed content
  */
-export async function decompress(data: Uint8Array, options?: DecompressOptions): Promise<string> {
+export async function decompress(data: string, options?: DecompressOptions): Promise<string> {
   return await decompressor(data, options)
 }

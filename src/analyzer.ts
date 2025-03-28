@@ -27,9 +27,9 @@ export interface Entry {
   /** Extracted template variables and their inferred types. */
   types: EntryTypes
   /** Optional processed data related to the file. */
-  data?: string | Uint8Array
+  data?: string
   /** Optional flag indicating whether the file is compressed or not. */
-  compressed?: boolean
+  compressed: boolean
 }
 
 /**

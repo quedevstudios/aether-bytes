@@ -30,13 +30,12 @@ export type DecompressOptions = InflateOptions
  *
  * @see {@link https://github.com/nodeca/pako#deflate}
  */
-export async function compressor(data: string | Uint8Array, options: CompressOptions = { level: 9 }): Promise<Uint8Array> {
-  const { ...deflateOptions } = options
-
+export async function compressor(data: string | Uint8Array, options: CompressOptions = { level: 9 }): Promise<string> {
   return new Promise((resolve, reject) => {
     try {
-      const compressedData = deflate(data, deflateOptions)
-      resolve(compressedData)
+      const compressedData = deflate(data, options)
+      const base64Data = btoa(String.fromCharCode(...compressedData))
+      resolve(base64Data)
     }
     catch (error) {
       reject(error)
@@ -47,24 +46,25 @@ export async function compressor(data: string | Uint8Array, options: CompressOpt
 /**
  * Decompresses the provided data using the `inflate` algorithm from the `pako` library.
  *
- * @param data - The data to be decompressed as a `Uint8Array`.
+ * @param data - The data to be decompressed as a string.
  * @param options - The decompression options.
  * @returns A promise that resolves to the decompressed data, either as a string (if the decompressed data is text) or as a `Uint8Array`.
  * @throws If the decompression fails, the promise is rejected with an error.
  *
  * @see {@link https://github.com/nodeca/pako#inflate}
  */
-export async function decompressor(data: Uint8Array, options: DecompressOptions = {}): Promise<string> {
-  const { ...inflateOptions } = options
-
+export async function decompressor(data: string, options: DecompressOptions = {}): Promise<string> {
   return new Promise((resolve, reject) => {
     try {
-      const decompressedData = inflate(data, inflateOptions)
+      const binaryString = atob(data)
+      const uint8Array = new Uint8Array(binaryString.length)
+      for (let i = 0; i < binaryString.length; i++) {
+        uint8Array[i] = binaryString.charCodeAt(i)
+      }
 
+      const decompressedData = inflate(uint8Array, options)
       const textDecoder = new TextDecoder("utf-8")
-      const decodedData = textDecoder.decode(decompressedData)
-
-      resolve(decodedData)
+      resolve(textDecoder.decode(decompressedData))
     }
     catch (error) {
       reject(error)

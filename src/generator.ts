@@ -1,4 +1,4 @@
-import type { Entry } from "./analyzer"
+import type { Entry, EntryTypes } from "./analyzer"
 
 /**
  * Represents the options for generating export files.
@@ -9,7 +9,7 @@ export interface GeneratorOptions {
   /** The filename for the type definition file. Defaults to "index.d". */
   typesFilename?: string
   /** The export format, either JavaScript ("js") or TypeScript ("ts"). Defaults to "ts". */
-  exportType?: "js" | "ts"
+  exportType?: "js" | "ts" | "json"
   /** Whether to generate separate files for types and content. Defaults to `false`. */
   splitFiles?: boolean
 }
@@ -35,7 +35,7 @@ function exportJsObject(entries: Entry[]): string {
   ${entries
     .map(
       entry =>
-        `  ["${entry.name}", { content: ${escapeUnicode(JSON.stringify(entry.data ?? entry.content))}, compressed: ${entry.compressed} }]`,
+        `  ["${entry.name}", { content: ${entry.data ? `"${entry.data}"` : escapeUnicode(JSON.stringify(entry.content))}, compressed: ${entry.compressed} }]`,
     )
     .join(",\n  ")}
 ]);`
@@ -51,7 +51,7 @@ function toPascalCase(str: string): string {
 }
 
 function exportTsDef(entries: Entry[]): string {
-  const createTypeOptions = `export declare type Options = ${entries
+  const createTypeOptions = `export type Options = ${entries
     .map(entry => `"${entry.name}"`)
     .join(" | ")};`
 
@@ -101,7 +101,7 @@ ${Object.entries(entry.types)
   ${entries
     .map(
       entry =>
-        `  ["${entry.name}", { content: ${escapeUnicode(JSON.stringify(entry.data ?? entry.content))}, compressed: ${entry.compressed} }]`,
+        `  ["${entry.name}", { content: ${entry.data ? `"${entry.data}"` : escapeUnicode(JSON.stringify(entry.content))}, compressed: ${entry.compressed} }]`,
     )
     .join(",\n  ")}
 ]);`
@@ -109,6 +109,27 @@ ${Object.entries(entry.types)
   return `${createTypeOptions}
 ${createTypeEntry.join("\n")}
 ${createEntryObject}`
+}
+
+interface ExportedJson {
+  [key: string]: {
+    types: EntryTypes
+    content: string
+    compressed: boolean
+  }
+}
+
+function exportJson(entries: Entry[]): string {
+  const result: ExportedJson = entries.reduce<ExportedJson>((acc, entry) => {
+    acc[entry.name] = {
+      types: entry.types,
+      content: entry.data ?? entry.content ?? "",
+      compressed: entry.compressed,
+    }
+    return acc
+  }, {})
+
+  return JSON.stringify(result, null, 2)
 }
 
 /**
@@ -123,7 +144,19 @@ export function generate(entries: Entry[], options?: GeneratorOptions): Generato
 
   const files: GeneratorFile[] = []
 
-  if (splitFiles && exportType === "ts") {
+  if (exportType === "json") {
+    files.push({
+      filename,
+      ext: "json",
+      content: exportJson(entries),
+    })
+  }
+  else if (splitFiles && exportType === "ts") {
+    files.push({
+      filename,
+      ext: "js",
+      content: exportJsObject(entries),
+    })
     files.push({
       filename,
       ext: "js",

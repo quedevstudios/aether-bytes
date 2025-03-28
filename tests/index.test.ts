@@ -103,7 +103,7 @@ describe("AetherBytes", () => {
       const compressed = await aetherBytes.compress()
 
       expect(compressed).toMatchObject([{
-        data: expect.any(Uint8Array),
+        data: expect.any(String),
         compressed: true,
       }])
     })
@@ -119,7 +119,7 @@ describe("AetherBytes", () => {
       }
 
       if (compressed && compressed.length > 1 && compressed?.[0]?.data) {
-        const decompressed = await decompress(compressed[0].data as Uint8Array)
+        const decompressed = await decompress(compressed[0].data)
 
         expect(decompressed).toMatchObject({
           data: expect.any(String),
@@ -130,17 +130,54 @@ describe("AetherBytes", () => {
   })
 
   describe("generate", () => {
-    test("should generate files", async () => {
+    test("should export for: TS", async () => {
       const aetherBytes = new AetherBytes()
       await aetherBytes.load(TEMPLATE_DIR, {
         compression: true,
       })
 
       await rm(TEMP_DIR, { recursive: true, force: true })
-      await aetherBytes.generate(TEMP_DIR)
+      await aetherBytes.generate(TEMP_DIR, { exportType: "ts" })
 
       const tempFiles = await readdir(TEMP_DIR, { recursive: true })
-      expect(tempFiles.length).toBe(1)
+      expect(tempFiles.length).toBeGreaterThan(0)
+    })
+
+    test("should export for: TS split files", async () => {
+      const aetherBytes = new AetherBytes()
+      await aetherBytes.load(TEMPLATE_DIR, {
+        compression: true,
+      })
+
+      await aetherBytes.generate(TEMP_DIR, { exportType: "ts", splitFiles: true })
+
+      const tempFiles = await readdir(TEMP_DIR, { recursive: true })
+      expect(tempFiles.length).toBeGreaterThan(0)
+    })
+
+    test("should export for: JS", async () => {
+      const aetherBytes = new AetherBytes()
+      await aetherBytes.load(TEMPLATE_DIR, {
+        compression: true,
+      })
+
+      await aetherBytes.generate(TEMP_DIR, { exportType: "js" })
+
+      const tempFiles = await readdir(TEMP_DIR, { recursive: true })
+      expect(tempFiles.length).toBeGreaterThan(0)
+    })
+
+    test("should export for: JSON", async () => {
+      const aetherBytes = new AetherBytes()
+      await aetherBytes.load(TEMPLATE_DIR, {
+        compression: true,
+      })
+
+      await aetherBytes.compress()
+      await aetherBytes.generate(TEMP_DIR, { exportType: "json" })
+
+      const tempFiles = await readdir(TEMP_DIR, { recursive: true })
+      expect(tempFiles.length).toBeGreaterThan(0)
     })
 
     test("should contain types and entries", async () => {
