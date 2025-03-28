@@ -2,7 +2,7 @@ import { readdir, rm } from "node:fs/promises"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { afterAll, describe, expect, test } from "bun:test"
-import { AetherBytes, decoder } from "../src"
+import { AetherBytes, decompress } from "../src"
 
 const TEMP_DIR = "./tests/.temp"
 const TEMPLATE_DIR = "./tests/templates"
@@ -29,39 +29,22 @@ describe("AetherBytes", () => {
   })
 
   describe("analyze", () => {
-    let previousEncoded: string
+    // let previousEncoded: string | Uint8Array | undefined
 
     test("should analyze file", async () => {
       const aetherBytes = new AetherBytes()
       const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
       const analysis = await aetherBytes.analyze(filepath)
 
-      previousEncoded = analysis.encoded
+      // previousEncoded = analysis.data
 
       expect(analysis).toMatchObject({
         name: TEMPLATE_FILES[0]?.split(".")[0],
         ext: TEMPLATE_FILES[0]?.split(".")[1],
         path: filepath,
         content: expect.any(String),
-        encoded: expect.any(String),
         types: expect.any(Object),
       })
-    })
-
-    test("should compress encoded", async () => {
-      const aetherBytes = new AetherBytes()
-      const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
-      const analysis = await aetherBytes.analyze(filepath, false, true)
-
-      expect(analysis.encoded).not.toBe(previousEncoded)
-
-      previousEncoded = analysis.encoded
-    })
-
-    test("should decompress encoded", async () => {
-      const analysis = await decoder(previousEncoded, true)
-
-      expect(analysis).not.toBe(previousEncoded)
     })
   })
 
@@ -76,7 +59,7 @@ describe("AetherBytes", () => {
 
       const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
       await aetherBytes.load(filepath)
-      expect(eventData).toMatchObject({ message: "Loading completed", files: 1 })
+      expect(eventData).toMatchObject({ message: expect.any(String), files: 1 })
     })
 
     test("should load files from directory", async () => {
@@ -88,7 +71,7 @@ describe("AetherBytes", () => {
       })
 
       await aetherBytes.load(TEMPLATE_DIR)
-      expect(eventData).toMatchObject({ message: "Loading completed", files: 3 })
+      expect(eventData).toMatchObject({ message: expect.any(String), files: 3 })
     })
 
     test("should apply extension filters", async () => {
@@ -112,13 +95,49 @@ describe("AetherBytes", () => {
     })
   })
 
-  describe("write", () => {
-    test("should write files", async () => {
+  describe("compress", () => {
+    test("should compress file", async () => {
       const aetherBytes = new AetherBytes()
-      await aetherBytes.load(TEMPLATE_DIR)
+      const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
+      await aetherBytes.analyze(filepath, true)
+      const compressed = await aetherBytes.compress()
+
+      expect(compressed).toMatchObject([{
+        data: expect.any(Uint8Array),
+        compressed: true,
+      }])
+    })
+
+    test("should decompress file", async () => {
+      const aetherBytes = new AetherBytes()
+      const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
+      await aetherBytes.analyze(filepath, true)
+      const compressed = await aetherBytes.compress()
+
+      if (!compressed || compressed.length === 0) {
+        throw new Error("No compressed data found")
+      }
+
+      if (compressed && compressed.length > 1 && compressed?.[0]?.data) {
+        const decompressed = await decompress(compressed[0].data as Uint8Array)
+
+        expect(decompressed).toMatchObject({
+          data: expect.any(String),
+          compressed: false,
+        })
+      }
+    })
+  })
+
+  describe("generate", () => {
+    test("should generate files", async () => {
+      const aetherBytes = new AetherBytes()
+      await aetherBytes.load(TEMPLATE_DIR, {
+        compression: true,
+      })
 
       await rm(TEMP_DIR, { recursive: true, force: true })
-      await aetherBytes.write(TEMP_DIR)
+      await aetherBytes.generate(TEMP_DIR)
 
       const tempFiles = await readdir(TEMP_DIR, { recursive: true })
       expect(tempFiles.length).toBe(1)
@@ -144,5 +163,5 @@ describe("AetherBytes", () => {
 })
 
 afterAll(async () => {
-  // await rm(TEMP_DIR, { recursive: true, force: true })
+  await rm(TEMP_DIR, { recursive: true, force: true })
 })

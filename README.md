@@ -8,6 +8,7 @@ Aether-Bytes is a lightweight library generator that converts various template d
 - Auto-generate TypeScript definitions – Ensure type safety and seamless integration.
 - Embed assets efficiently – Keep necessary files accessible without external dependencies.
 - Lightweight and fast – Designed for performance and minimal overhead.
+- Compressed output – Reduce the size of your assets with pako.
 
 ## 🔧 Use Cases
 - Embedding configuration or JSON files directly into a package.

@@ -20,7 +20,6 @@
     "registry": "https://registry.npmjs.org"
   },
   "keywords": [
-    "base64",
     "templates",
     "encoder",
     "typescript",
@@ -54,7 +53,9 @@
   "peerDependencies": {
     "typescript": "^5.8.2"
   },
-  "dependencies": {},
+  "dependencies": {
+    "pako": "^2.1.0"
+  },
   "devDependencies": {
     "@antfu/eslint-config": "^4.10.1",
     "@commitlint/cli": "^19.8.0",
@@ -63,6 +64,7 @@
     "@rollup/plugin-typescript": "^12.1.2",
     "@semantic-release/git": "^10.0.1",
     "@types/bun": "^1.2.5",
+    "@types/pako": "^2.0.3",
     "eslint": "^9.22.0",
     "lint-staged": "^15.5.0",
     "rollup": "^4.36.0",
