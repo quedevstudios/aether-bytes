@@ -15,3 +15,5 @@ Aether-Bytes is a lightweight library generator that converts various template d
 - Storing email templates, HTML snippets, or markdown files as Base64.
 - Ensuring type-safe access to pre-defined templates in a TypeScript project.
 - Reducing external file dependencies in a deployment environment.
+
+https://www.npmjs.com/package/aether-bytes

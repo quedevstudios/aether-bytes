@@ -1,4 +1,4 @@
-import type { Entry, EntryTypes } from "./analyzer"
+import type { Entry } from "./analyzer"
 
 /**
  * Represents the options for generating export files.
@@ -31,14 +31,29 @@ function escapeUnicode(str: string): string {
 }
 
 function exportJsObject(entries: Entry[]): string {
-  return `export const entries = new Map([
+  const createEntryObject = `export const entries = new Map([
   ${entries
     .map(
       entry =>
-        `  ["${entry.name}", { content: ${entry.data ? `"${entry.data}"` : escapeUnicode(JSON.stringify(entry.content))}, compressed: ${entry.compressed} }]`,
+        `["${entry.name}", { content: ${entry.data ? `"${entry.data}"` : escapeUnicode(JSON.stringify(entry.content))}, compressed: ${entry.compressed} }]`,
     )
     .join(",\n  ")}
 ]);`
+
+  const createFunctions = `export function getEntry(key) {
+  return entries.get(key);
+}
+export function getEntries(filter) {
+  return Array.from(entries).filter(filter);
+}
+export function useEntry(key, options) {
+  const entry = entries.get(key);
+
+  // Add functionality here
+}`
+
+  return `${createEntryObject}
+${createFunctions}`
 }
 
 function toPascalCase(str: string): string {
@@ -51,43 +66,22 @@ function toPascalCase(str: string): string {
 }
 
 function exportTsDef(entries: Entry[]): string {
-  const createTypeOptions = `export type Options = ${entries
+  const createTypeOptions = `export type EntryOptions =
+  | ${entries
     .map(entry => `"${entry.name}"`)
-    .join(" | ")};`
+    .join("\n  | ")};`
+
+  const createTypeData = `export type EntryData = {
+  content: string;
+  compressed: boolean;
+};`
 
   const createTypeEntry = entries
     .map((entry) => {
       if (!entry.types || Object.keys(entry.types).length === 0)
         return ""
 
-      const type = `export interface ${toPascalCase(entry.name)} {
-${Object.entries(entry.types)
-  .map(([key, value]) => `  ${key}: ${value};`)
-  .join("\n")}
-}`
-
-      return type
-    })
-    .filter(Boolean)
-
-  const createEntryObject = `export declare const entries: Map<Options, { content: string; compressed: boolean }>;`
-
-  return `${createTypeOptions}
-${createTypeEntry.join("\n")}
-${createEntryObject}`
-}
-
-function exportTsFull(entries: Entry[]): string {
-  const createTypeOptions = `export type Options = ${entries
-    .map(entry => `"${entry.name}"`)
-    .join(" | ")};`
-
-  const createTypeEntry = entries
-    .map((entry) => {
-      if (!entry.types || Object.keys(entry.types).length === 0)
-        return ""
-
-      const type = `export interface ${toPascalCase(entry.name)} {
+      const type = `export type ${toPascalCase(entry.name)} = {
 ${Object.entries(entry.types)
   .map(([key, value]) => `  ${key}: ${value};`)
   .join("\n")}
@@ -97,23 +91,89 @@ ${Object.entries(entry.types)
     })
     .filter(Boolean)
 
-  const createEntryObject = `export const entries = new Map<Options, { content: string; compressed: boolean }>([
+  const createTypeEntryMap = `export type EntryMap = {
+  ${entries
+    .map(entry => `"${entry.name}": ${toPascalCase(entry.name)};`)
+    .join("\n  ")}
+};`
+
+  const createEntryObject = `declare const entries: Map<EntryOptions, EntryData>;`
+
+  const createFunctions = `declare function getEntry(key: EntryOptions): EntryData | undefined;
+declare function getEntries(filter: (entry: [EntryOptions, EntryData]) => boolean): [EntryOptions, EntryData][];
+declare function useEntry<K extends keyof EntryMap>(key: K, options: EntryMap[K]);`
+
+  return `${createTypeOptions}
+${createTypeData}
+${createTypeEntry.join("\n")}
+${createTypeEntryMap}
+${createEntryObject}
+${createFunctions}`
+}
+
+function exportTsFull(entries: Entry[]): string {
+  const createTypeOptions = `export type EntryOptions =
+  | ${entries
+    .map(entry => `"${entry.name}"`)
+    .join("\n  | ")};`
+
+  const createTypeData = `export type EntryData = {
+  content: string;
+  compressed: boolean;
+};`
+
+  const createTypeEntry = entries
+    .map((entry) => {
+      if (!entry.types || Object.keys(entry.types).length === 0)
+        return ""
+
+      const type = `export type ${toPascalCase(entry.name)} = {
+${Object.entries(entry.types)
+  .map(([key, value]) => `  ${key}: ${value};`)
+  .join("\n")}
+};`
+
+      return type
+    })
+    .filter(Boolean)
+
+  const createTypeEntryMap = `export type EntryMap = {
+  ${entries
+    .map(entry => `"${entry.name}": ${toPascalCase(entry.name)};`)
+    .join("\n  ")}
+};`
+
+  const createEntryObject = `export const entries = new Map<EntryOptions, EntryData>([
   ${entries
     .map(
       entry =>
-        `  ["${entry.name}", { content: ${entry.data ? `"${entry.data}"` : escapeUnicode(JSON.stringify(entry.content))}, compressed: ${entry.compressed} }]`,
+        `["${entry.name}", { content: ${entry.data ? `"${entry.data}"` : escapeUnicode(JSON.stringify(entry.content))}, compressed: ${entry.compressed} }]`,
     )
     .join(",\n  ")}
 ]);`
 
+  const createFunctions = `export function getEntry(key: EntryOptions): EntryData | undefined {
+  return entries.get(key);
+}
+export function getEntries(filter: (entry: [EntryOptions, EntryData]) => boolean): [EntryOptions, EntryData][] {
+  return Array.from(entries).filter(filter);
+};
+export function useEntry<K extends keyof EntryMap>(key: K, options: EntryMap[K]) {
+  const entry = entries.get(key);
+
+  // Add functionality here
+}`
+
   return `${createTypeOptions}
+${createTypeData}
 ${createTypeEntry.join("\n")}
-${createEntryObject}`
+${createTypeEntryMap}
+${createEntryObject}
+${createFunctions}`
 }
 
 interface ExportedJson {
   [key: string]: {
-    types: EntryTypes
     content: string
     compressed: boolean
   }
@@ -122,7 +182,6 @@ interface ExportedJson {
 function exportJson(entries: Entry[]): string {
   const result: ExportedJson = entries.reduce<ExportedJson>((acc, entry) => {
     acc[entry.name] = {
-      types: entry.types,
       content: entry.data ?? entry.content ?? "",
       compressed: entry.compressed,
     }
