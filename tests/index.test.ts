@@ -24,7 +24,7 @@ describe("AetherBytes", () => {
       const aetherBytes = new AetherBytes()
       await aetherBytes.load(TEMPLATE_DIR)
 
-      expect(aetherBytes.getEntries().length).toBe(3)
+      expect(aetherBytes.getEntries().length).toBe(5)
     })
   })
 
@@ -71,14 +71,14 @@ describe("AetherBytes", () => {
       })
 
       await aetherBytes.load(TEMPLATE_DIR)
-      expect(eventData).toMatchObject({ message: expect.any(String), files: 3 })
+      expect(eventData).toMatchObject({ message: expect.any(String), files: 5 })
     })
 
     test("should apply extension filters", async () => {
       const aetherBytes = new AetherBytes()
       await aetherBytes.load(TEMPLATE_DIR, { includeExt: ["md"] })
 
-      expect(aetherBytes.getEntries().length).toBe(1)
+      expect(aetherBytes.getEntries().length).toBe(2)
     })
 
     test("should handle conflicting include and exclude filters", async () => {
@@ -129,11 +129,35 @@ describe("AetherBytes", () => {
     })
   })
 
+  describe("addExtra", () => {
+    test("should add extra metadata to file", async () => {
+      const aetherBytes = new AetherBytes()
+      const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
+      await aetherBytes.analyze(filepath, true)
+      await aetherBytes.addExtra(() => {
+        return {
+          hello: "world",
+        }
+      })
+
+      const entries = aetherBytes.getEntries()
+      const entry = entries.find(entry => entry.extra?.hello === "world")
+
+      expect(entry).toBeDefined()
+    })
+  })
+
   describe("generate", () => {
     test("should export for: TS", async () => {
       const aetherBytes = new AetherBytes()
       await aetherBytes.load(TEMPLATE_DIR, {
         compression: true,
+      })
+      await aetherBytes.addExtra(() => {
+        return {
+          hello: "world",
+          cat: 5,
+        }
       })
 
       await rm(TEMP_DIR, { recursive: true, force: true })
@@ -148,6 +172,13 @@ describe("AetherBytes", () => {
       await aetherBytes.load(TEMPLATE_DIR, {
         compression: true,
       })
+      await aetherBytes.addExtra(() => {
+        return {
+          hello: "world",
+          cat: 5,
+          master: "chief",
+        }
+      })
 
       await aetherBytes.generate(TEMP_DIR, { exportType: "ts", splitFiles: true })
 
@@ -159,6 +190,12 @@ describe("AetherBytes", () => {
       const aetherBytes = new AetherBytes()
       await aetherBytes.load(TEMPLATE_DIR, {
         compression: true,
+      })
+      await aetherBytes.addExtra(() => {
+        return {
+          hello: "world",
+          cat: 5,
+        }
       })
 
       await aetherBytes.generate(TEMP_DIR, { exportType: "js" })
@@ -172,7 +209,12 @@ describe("AetherBytes", () => {
       await aetherBytes.load(TEMPLATE_DIR, {
         compression: true,
       })
-
+      await aetherBytes.addExtra(() => {
+        return {
+          hello: "world",
+          cat: 5,
+        }
+      })
       await aetherBytes.compress()
       await aetherBytes.generate(TEMP_DIR, { exportType: "json" })
 
@@ -200,5 +242,5 @@ describe("AetherBytes", () => {
 })
 
 afterAll(async () => {
-  await rm(TEMP_DIR, { recursive: true, force: true })
+  // await rm(TEMP_DIR, { recursive: true, force: true })
 })

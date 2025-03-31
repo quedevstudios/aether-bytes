@@ -30,165 +30,126 @@ function escapeUnicode(str: string): string {
   return str.replace(/[\u2028\u2029]/g, match => (match === "\u2028" ? "\\u2028" : "\\u2029"))
 }
 
-function exportJsObject(entries: Entry[]): string {
-  const createEntryObject = `export const entries = new Map([
-  ${entries
-    .map(
-      entry =>
-        `["${entry.name}", { content: ${entry.data ? `"${entry.data}"` : escapeUnicode(JSON.stringify(entry.content))}, compressed: ${entry.compressed} }]`,
-    )
-    .join(",\n  ")}
-]);`
+function sanitizeTypeName(name: string): string {
+  return name.replace(/\W/g, "_").replace(/^(\d)/, "_$1")
+}
 
-  const createFunctions = `export function getEntry(key) {
+function formatJsEntries(entries: Entry[]): string {
+  return entries.map((entry) => {
+    const extraFields = entry.extra
+      ? Object.entries(entry.extra)
+          .filter(([, value]) => value !== undefined)
+          .map(([key, value]) => `${key}: ${typeof value === "string" ? `"${value}"` : value}`)
+          .join(",\n    ")
+      : ""
+
+    return `["${entry.name}", {
+    ${extraFields ? `${extraFields},\n    ` : ""}content: ${entry.data ? `"${entry.data}"` : escapeUnicode(JSON.stringify(entry.content))},
+    compressed: ${entry.compressed}
+  }]`
+  }).join(",\n  ")
+}
+
+function exportJsObject(entries: Entry[]): string {
+  return `export const entries = new Map([
+  ${formatJsEntries(entries)}
+]);\n
+export function getEntry(key) {
   return entries.get(key);
 }
 export function getEntries(filter) {
   return Array.from(entries).filter(filter);
 }
 export function useEntry(key, options) {
-  const entry = entries.get(key);
-
-  // Add functionality here
+  /* Add functionality */
+  return entries.get(key);
 }`
-
-  return `${createEntryObject}
-${createFunctions}`
 }
 
-function toPascalCase(str: string): string {
-  return str
-    .replace(/[-_]+/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .split(" ")
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join("")
-}
-
-function exportTsDef(entries: Entry[]): string {
-  const createTypeOptions = `export type EntryOptions =
-  | ${entries
-    .map(entry => `"${entry.name}"`)
-    .join("\n  | ")};`
-
-  const createTypeData = `export type EntryData = {
-  content: string;
-  compressed: boolean;
-};`
-
-  const createTypeEntry = entries
-    .map((entry) => {
-      if (!entry.types || Object.keys(entry.types).length === 0)
-        return ""
-
-      const type = `export type ${toPascalCase(entry.name)} = {
-${Object.entries(entry.types)
+function generateTypeMappings(entries: Entry[]): string {
+  return entries
+    .filter(entry => entry.types && Object.keys(entry.types).length > 0)
+    .map(entry => `export interface ${sanitizeTypeName(entry.name)} {
+${Object.entries(entry.types!)
   .map(([key, value]) => `  ${key}: ${value};`)
   .join("\n")}
-};`
-
-      return type
-    })
-    .filter(Boolean)
-
-  const createTypeEntryMap = `export type EntryMap = {
-  ${entries
-    .map(entry => `"${entry.name}": ${toPascalCase(entry.name)};`)
-    .join("\n  ")}
-};`
-
-  const createEntryObject = `declare const entries: Map<EntryOptions, EntryData>;`
-
-  const createFunctions = `declare function getEntry(key: EntryOptions): EntryData | undefined;
-declare function getEntries(filter: (entry: [EntryOptions, EntryData]) => boolean): [EntryOptions, EntryData][];
-declare function useEntry<K extends keyof EntryMap>(key: K, options: EntryMap[K]);`
-
-  return `${createTypeOptions}
-${createTypeData}
-${createTypeEntry.join("\n")}
-${createTypeEntryMap}
-${createEntryObject}
-${createFunctions}`
+}`)
+    .join("\n\n")
 }
 
-function exportTsFull(entries: Entry[]): string {
-  const createTypeOptions = `export type EntryOptions =
-  | ${entries
-    .map(entry => `"${entry.name}"`)
-    .join("\n  | ")};`
+function generateEntryTypeMap(entries: Entry[]): string {
+  const entryTypeMap = entries
+    .filter(entry => entry.types && Object.keys(entry.types).length > 0)
+    .map(entry => `"${entry.name}": ${sanitizeTypeName(entry.name)};`)
+    .join("\n  ")
 
-  const createTypeData = `export type EntryData = {
-  content: string;
-  compressed: boolean;
-};`
+  return `export interface EntryMap {\n  ${entryTypeMap}\n}`
+}
 
-  const createTypeEntry = entries
-    .map((entry) => {
-      if (!entry.types || Object.keys(entry.types).length === 0)
-        return ""
+function generateEntryOptions(entries: Entry[]): string {
+  return `export type EntryOptions = ${entries.map(entry => `"${entry.name}"`).join(" | ")};`
+}
 
-      const type = `export type ${toPascalCase(entry.name)} = {
-${Object.entries(entry.types)
-  .map(([key, value]) => `  ${key}: ${value};`)
-  .join("\n")}
-};`
+function generateEntryDataInterface(entries: Entry[]): string {
+  const fieldTypes: Record<string, Set<string>> = {}
 
-      return type
+  entries.forEach((entry) => {
+    if (!entry.extra)
+      return
+
+    Object.entries(entry.extra).forEach(([key, value]) => {
+      if (!fieldTypes[key]) {
+        fieldTypes[key] = new Set()
+      }
+      fieldTypes[key]?.add(typeof value)
     })
-    .filter(Boolean)
+  })
 
-  const createTypeEntryMap = `export type EntryMap = {
-  ${entries
-    .map(entry => `"${entry.name}": ${toPascalCase(entry.name)};`)
-    .join("\n  ")}
-};`
+  const extraFields = Object.entries(fieldTypes)
+    .map(([key, types]) => `${key}?: ${[...types].filter(t => t !== "undefined").join(" | ") || "any"};`)
+    .join("\n  ")
 
-  const createEntryObject = `export const entries = new Map<EntryOptions, EntryData>([
-  ${entries
-    .map(
-      entry =>
-        `["${entry.name}", { content: ${entry.data ? `"${entry.data}"` : escapeUnicode(JSON.stringify(entry.content))}, compressed: ${entry.compressed} }]`,
-    )
-    .join(",\n  ")}
-]);`
+  return `export interface EntryData {\n  ${extraFields ? `${extraFields}\n  ` : ""}content: string;\n  compressed: boolean;\n}`
+}
 
-  const createFunctions = `export function getEntry(key: EntryOptions): EntryData | undefined {
+function exportTs(entries: Entry[], full: boolean): string {
+  const typeDefinitions = [
+    generateEntryOptions(entries),
+    generateEntryDataInterface(entries),
+    generateTypeMappings(entries),
+    generateEntryTypeMap(entries),
+  ].join("\n\n")
+
+  if (!full) {
+    return `${typeDefinitions}\n\ndeclare const entries: Map<EntryOptions, EntryData>;
+declare function getEntry(key: EntryOptions): EntryData | undefined;
+declare function getEntries(filter?: (entry: [EntryOptions, EntryData]) => boolean): [EntryOptions, EntryData][];
+declare function useEntry<K extends keyof EntryMap>(key: K | EntryOptions, options?: EntryMap[K]): any;`
+  }
+
+  return `${typeDefinitions}\n\nexport const entries = new Map<EntryOptions, EntryData>([\n  ${formatJsEntries(entries)}\n]);
+
+export function getEntry(key: EntryOptions): EntryData | undefined {
   return entries.get(key);
 }
-export function getEntries(filter: (entry: [EntryOptions, EntryData]) => boolean): [EntryOptions, EntryData][] {
-  return Array.from(entries).filter(filter);
-};
-export function useEntry<K extends keyof EntryMap>(key: K, options: EntryMap[K]) {
-  const entry = entries.get(key);
-
-  // Add functionality here
-}`
-
-  return `${createTypeOptions}
-${createTypeData}
-${createTypeEntry.join("\n")}
-${createTypeEntryMap}
-${createEntryObject}
-${createFunctions}`
+export function getEntries(filter?: (entry: [EntryOptions, EntryData]) => boolean): [EntryOptions, EntryData][] {
+  return filter ? Array.from(entries).filter(filter) : Array.from(entries);
 }
-
-interface ExportedJson {
-  [key: string]: {
-    content: string
-    compressed: boolean
-  }
+export function useEntry<K extends keyof EntryMap>(key: K | EntryOptions, options?: EntryMap[K]): any {
+  /* Add functionality */
+  return entries.get(key);
+}`
 }
 
 function exportJson(entries: Entry[]): string {
-  const result: ExportedJson = entries.reduce<ExportedJson>((acc, entry) => {
-    acc[entry.name] = {
-      content: entry.data ?? entry.content ?? "",
-      compressed: entry.compressed,
-    }
-    return acc
-  }, {})
-
-  return JSON.stringify(result, null, 2)
+  return JSON.stringify(
+    Object.fromEntries(entries.map((entry) => {
+      const extraFields = entry.extra ? { ...entry.extra } : {}
+      return [entry.name, { ...extraFields, content: entry.data ?? entry.content ?? "", compressed: entry.compressed }]
+    })),
+    null,
+    2,
+  )
 }
 
 /**
@@ -198,41 +159,19 @@ function exportJson(entries: Entry[]): string {
  * @param options - Configuration options for file generation.
  * @returns An array of generated files.
  */
-export function generate(entries: Entry[], options?: GeneratorOptions): GeneratorFile[] {
-  const { filename = "index", typesFilename = "index.d", exportType = "ts", splitFiles = false } = options || {}
-
+export function generate(entries: Entry[], options: GeneratorOptions = {}): GeneratorFile[] {
+  const { filename = "index", typesFilename = "index.d", exportType = "ts", splitFiles = false } = options
   const files: GeneratorFile[] = []
 
   if (exportType === "json") {
-    files.push({
-      filename,
-      ext: "json",
-      content: exportJson(entries),
-    })
+    files.push({ filename, ext: "json", content: exportJson(entries) })
   }
   else if (splitFiles && exportType === "ts") {
-    files.push({
-      filename,
-      ext: "js",
-      content: exportJsObject(entries),
-    })
-    files.push({
-      filename,
-      ext: "js",
-      content: exportJsObject(entries),
-    })
-    files.push({
-      filename: typesFilename,
-      ext: "ts",
-      content: exportTsDef(entries),
-    })
+    files.push({ filename, ext: "js", content: exportJsObject(entries) })
+    files.push({ filename: typesFilename, ext: "ts", content: exportTs(entries, false) })
   }
   else {
-    files.push({
-      filename,
-      ext: exportType,
-      content: exportType === "ts" ? exportTsFull(entries) : exportJsObject(entries),
-    })
+    files.push({ filename, ext: exportType, content: exportType === "ts" ? exportTs(entries, true) : exportJsObject(entries) })
   }
 
   return files

@@ -26,10 +26,14 @@ export interface Entry {
   content: string
   /** Extracted template variables and their inferred types. */
   types: EntryTypes
-  /** Optional processed data related to the file. */
-  data?: string
   /** Optional flag indicating whether the file is compressed or not. */
   compressed: boolean
+  /** Optional processed data related to the file. */
+  data?: string
+  /** Optional extra metadata related to the file. */
+  extra?: {
+    [key: string]: string | number | boolean
+  }
 }
 
 /**

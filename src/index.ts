@@ -44,6 +44,16 @@ export interface LoadOptions {
   compression?: boolean
 }
 
+/**
+ * Represents a callback function to modify an entry.
+ */
+export type ModifyCallback = (entry: Entry) => Promise<Partial<Entry> | undefined> | Partial<Entry> | undefined
+
+/**
+ * Represents a callback function to add extra to an entry.
+ */
+export type ExtraCallback = (entry: Entry) => Promise<{ [key: string]: string | number | boolean } | undefined> | { [key: string]: string | number | boolean } | undefined
+
 export class AetherBytes {
   private eventEmitter: EventEmitter
   private entries: Entry[] = []
@@ -255,6 +265,42 @@ export class AetherBytes {
   }
 
   /**
+   * Modifies the loaded entries by using the specified callback.
+   *
+   * @param callback - A callback function that returns an object with extra metadata.
+   * @returns A promise resolving to an array of loaded {@link Entry} objects with added extra metadata
+   */
+  public async modifyEntries(callback: ModifyCallback): Promise<Entry[]> {
+    for (const entry of this.entries) {
+      const updatedEntry = await callback(entry)
+
+      if (updatedEntry && Object.keys(updatedEntry).length > 0) {
+        Object.assign(entry, updatedEntry)
+      }
+    }
+
+    return this.entries
+  }
+
+  /**
+   * Adds extra metadata to the loaded entries.
+   *
+   * @param callback - A callback function that returns an object with extra metadata.
+   * @returns A promise resolving to an array of loaded {@link Entry} objects with added extra metadata
+   */
+  public async addExtra(callback: ExtraCallback): Promise<Entry[]> {
+    for (const entry of this.entries) {
+      const extra = await callback(entry)
+
+      if (extra && Object.keys(extra).length > 0) {
+        entry.extra = extra
+      }
+    }
+
+    return this.entries
+  }
+
+  /**
    * Generates files from the loaded entries using the specified template engine.
    *
    * @param destination - The destination directory to write the generated files.
@@ -270,7 +316,8 @@ export class AetherBytes {
       return undefined
     }
 
-    const files = generate(this.entries, options)
+    const sortedEntries = this.entries.sort((a, b) => a.name.localeCompare(b.name))
+    const files = generate(sortedEntries, options)
 
     for (const file of files) {
       try {
