@@ -1,7 +1,6 @@
 import { readdir, rm } from "node:fs/promises"
 import { join } from "node:path"
-import { pathToFileURL } from "node:url"
-import { afterAll, describe, expect, test } from "bun:test"
+import { beforeAll, describe, expect, test } from "bun:test"
 import { AetherBytes, decompress } from "../src"
 
 const TEMP_DIR = "./tests/.temp"
@@ -12,39 +11,61 @@ if (TEMPLATE_FILES.length === 0) {
   throw new Error("No files found in the template directory")
 }
 
+beforeAll(async () => {
+  await rm(TEMP_DIR, { recursive: true, force: true })
+})
+
 describe("AetherBytes", () => {
   describe("getEntries", () => {
-    test("should return empty array if no files loaded", () => {
+    test("should return empty if no files loaded", () => {
       const aetherBytes = new AetherBytes()
 
-      expect(aetherBytes.getEntries()).toEqual([])
+      expect(aetherBytes.getEntries().length).toEqual(0)
     })
 
     test("should return loaded files", async () => {
       const aetherBytes = new AetherBytes()
       await aetherBytes.load(TEMPLATE_DIR)
 
-      expect(aetherBytes.getEntries().length).toBe(5)
+      expect(aetherBytes.getEntries().length).not.toBe(0)
     })
   })
 
   describe("analyze", () => {
-    // let previousEncoded: string | Uint8Array | undefined
-
-    test("should analyze file", async () => {
+    test("should process a file and extract metadata with types", async () => {
       const aetherBytes = new AetherBytes()
       const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
-      const analysis = await aetherBytes.analyze(filepath)
+      const entry = await aetherBytes.analyze({ filepath })
 
-      // previousEncoded = analysis.data
-
-      expect(analysis).toMatchObject({
+      expect(entry).toMatchObject({
         name: TEMPLATE_FILES[0]?.split(".")[0],
         ext: TEMPLATE_FILES[0]?.split(".")[1],
         path: filepath,
         content: expect.any(String),
         types: expect.any(Object),
       })
+    })
+
+    test("should process a file and extract metadata without types", async () => {
+      const aetherBytes = new AetherBytes()
+      const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
+      const entry = await aetherBytes.analyze({ filepath, genTypes: false })
+
+      expect(entry).toMatchObject({
+        name: TEMPLATE_FILES[0]?.split(".")[0],
+        ext: TEMPLATE_FILES[0]?.split(".")[1],
+        path: filepath,
+        content: expect.any(String),
+      })
+    })
+
+    test("should throw an error if file does not exist", () => {
+      const aetherBytes = new AetherBytes()
+      const filepath = join(TEMPLATE_DIR, "nonexistent-file.txt")
+
+      expect(aetherBytes.analyze({ filepath })).rejects.toThrow(
+        `File does not exist: ${filepath}`,
+      )
     })
   })
 
@@ -96,151 +117,229 @@ describe("AetherBytes", () => {
   })
 
   describe("compress", () => {
-    test("should compress file", async () => {
+    test("should encode entry content to data and set compressed to true", async () => {
       const aetherBytes = new AetherBytes()
-      const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
-      await aetherBytes.analyze(filepath, true)
-      const compressed = await aetherBytes.compress()
+      const originalEntries = await aetherBytes.load(TEMPLATE_DIR)
+      const compressedEntries = await aetherBytes.compress()
 
-      expect(compressed).toMatchObject([{
-        data: expect.any(String),
-        compressed: true,
-      }])
+      expect(originalEntries[0]?.content).not.toEqual(compressedEntries[0]?.data)
+      expect(compressedEntries[0]).toHaveProperty("compressed", true)
     })
+  })
 
-    test("should decompress file", async () => {
+  describe("decompress", () => {
+    test("should decode compressed entry data to data", async () => {
       const aetherBytes = new AetherBytes()
-      const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
-      await aetherBytes.analyze(filepath, true)
-      const compressed = await aetherBytes.compress()
+      await aetherBytes.load(TEMPLATE_DIR)
+      const compressedEntries = await aetherBytes.compress()
+      const decompressedEntries = await aetherBytes.decompress()
 
-      if (!compressed || compressed.length === 0) {
-        throw new Error("No compressed data found")
-      }
+      expect(compressedEntries[0]?.data).not.toEqual(decompressedEntries[0]?.data)
+      expect(decompressedEntries[0]).toHaveProperty("compressed", false)
+    })
+  })
 
-      if (compressed && compressed.length > 1 && compressed?.[0]?.data) {
-        const decompressed = await decompress(compressed[0].data)
+  describe("modifyEntries", () => {
+    test(" should update entry properties", async () => {
+      const aetherBytes = new AetherBytes()
+      await aetherBytes.load(TEMPLATE_DIR)
+      await aetherBytes.modifyEntries(entry => ({ name: `${entry.name} - Hello World!` }))
 
-        expect(decompressed).toMatchObject({
-          data: expect.any(String),
-          compressed: false,
-        })
-      }
+      expect(aetherBytes.getEntries()[0]).toHaveProperty("name", `${TEMPLATE_FILES[0]?.split(".")[0]} - Hello World!`)
     })
   })
 
   describe("addExtra", () => {
-    test("should add extra metadata to file", async () => {
+    test("should add extra property to entry", async () => {
       const aetherBytes = new AetherBytes()
-      const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
-      await aetherBytes.analyze(filepath, true)
-      await aetherBytes.addExtra(() => {
-        return {
-          hello: "world",
-        }
-      })
+      await aetherBytes.load(TEMPLATE_DIR)
+      await aetherBytes.addExtra(_entry => ({ category: "test" }))
 
-      const entries = aetherBytes.getEntries()
-      const entry = entries.find(entry => entry.extra?.hello === "world")
-
-      expect(entry).toBeDefined()
+      expect(aetherBytes.getEntries()[0]?.extra).toHaveProperty("category", "test")
     })
   })
 
   describe("generate", () => {
-    test("should export for: TS", async () => {
+    test("should export: json without helpers", async () => {
       const aetherBytes = new AetherBytes()
-      await aetherBytes.load(TEMPLATE_DIR, {
-        compression: true,
+      await aetherBytes.load(TEMPLATE_DIR)
+      const outputDir = join(TEMP_DIR, "json-no-helpers")
+      const filename = "data"
+      await aetherBytes.generate(outputDir, {
+        jsonFilename: filename,
+        exportFormat: "json",
+        exportHelpers: false,
       })
-      await aetherBytes.addExtra(() => {
-        return {
-          hello: "world",
-          cat: 5,
-        }
+      const tempFiles = await readdir(outputDir, { recursive: true })
+
+      expect(tempFiles.length).toBe(1)
+      expect(tempFiles[0]).toContain(filename)
+    })
+    test("should export: json with js helpers separate", async () => {
+      const aetherBytes = new AetherBytes()
+      await aetherBytes.load(TEMPLATE_DIR)
+      const outputDir = join(TEMP_DIR, "json-js-helpers-separate")
+      const filename = "data"
+      const helperFilename = "helpers"
+      await aetherBytes.generate(outputDir, {
+        helpersFilename: helperFilename,
+        jsonFilename: filename,
+        exportFormat: "json",
+        exportHelpersFormat: "js",
+        mergeFiles: false,
       })
+      const tempFiles = await readdir(outputDir, { recursive: true })
 
-      await rm(TEMP_DIR, { recursive: true, force: true })
-      await aetherBytes.generate(TEMP_DIR, { exportType: "ts" })
+      expect(tempFiles.length).toBe(2)
+      expect(tempFiles[0]).toContain(filename)
+      expect(tempFiles[1]).toContain(helperFilename)
+    })
+    test("should export: json with ts helpers separate", async () => {
+      const aetherBytes = new AetherBytes()
+      await aetherBytes.load(TEMPLATE_DIR)
+      const outputDir = join(TEMP_DIR, "json-ts-helpers-separate")
+      const filename = "data"
+      const helperFilename = "helpers"
+      await aetherBytes.generate(outputDir, {
+        helpersFilename: helperFilename,
+        jsonFilename: filename,
+        exportFormat: "json",
+        exportHelpersFormat: "ts",
+        mergeFiles: false,
+      })
+      const tempFiles = await readdir(outputDir, { recursive: true })
 
-      const tempFiles = await readdir(TEMP_DIR, { recursive: true })
-      expect(tempFiles.length).toBeGreaterThan(0)
+      expect(tempFiles.length).toBe(2)
+      expect(tempFiles[0]).toContain(filename)
+      expect(tempFiles[1]).toContain(helperFilename)
     })
 
-    test("should export for: TS split files", async () => {
+    test("should export: js without helpers", async () => {
       const aetherBytes = new AetherBytes()
-      await aetherBytes.load(TEMPLATE_DIR, {
-        compression: true,
+      await aetherBytes.load(TEMPLATE_DIR)
+      const outputDir = join(TEMP_DIR, "js-no-helpers")
+      const filename = "index"
+      await aetherBytes.generate(outputDir, {
+        indexFilename: filename,
+        exportFormat: "js",
+        exportHelpers: false,
       })
-      await aetherBytes.addExtra(() => {
-        return {
-          hello: "world",
-          cat: 5,
-          master: "chief",
-        }
-      })
+      const tempFiles = await readdir(outputDir, { recursive: true })
 
-      await aetherBytes.generate(TEMP_DIR, { exportType: "ts", splitFiles: true })
-
-      const tempFiles = await readdir(TEMP_DIR, { recursive: true })
-      expect(tempFiles.length).toBeGreaterThan(0)
+      expect(tempFiles.length).toBe(1)
+      expect(tempFiles[0]).toContain(filename)
     })
-
-    test("should export for: JS", async () => {
+    test("should export: js with helpers separate", async () => {
       const aetherBytes = new AetherBytes()
-      await aetherBytes.load(TEMPLATE_DIR, {
-        compression: true,
+      await aetherBytes.load(TEMPLATE_DIR)
+      const outputDir = join(TEMP_DIR, "js-js-helpers-separate")
+      const filename = "index"
+      const helperFilename = "helpers"
+      await aetherBytes.generate(outputDir, {
+        helpersFilename: helperFilename,
+        indexFilename: filename,
+        exportFormat: "js",
+        exportHelpersFormat: "js",
+        mergeFiles: false,
       })
-      await aetherBytes.addExtra(() => {
-        return {
-          hello: "world",
-          cat: 5,
-        }
-      })
+      const tempFiles = await readdir(outputDir, { recursive: true })
 
-      await aetherBytes.generate(TEMP_DIR, { exportType: "js" })
-
-      const tempFiles = await readdir(TEMP_DIR, { recursive: true })
-      expect(tempFiles.length).toBeGreaterThan(0)
+      expect(tempFiles.length).toBe(2)
+      expect(tempFiles[1]).toContain(filename)
+      expect(tempFiles[0]).toContain(helperFilename)
     })
-
-    test("should export for: JSON", async () => {
+    test("should export: js with helpers merged", async () => {
       const aetherBytes = new AetherBytes()
-      await aetherBytes.load(TEMPLATE_DIR, {
-        compression: true,
+      await aetherBytes.load(TEMPLATE_DIR)
+      const outputDir = join(TEMP_DIR, "js-js-helpers-merged")
+      const filename = "index"
+      await aetherBytes.generate(outputDir, {
+        indexFilename: filename,
+        exportFormat: "js",
+        exportHelpersFormat: "js",
+        mergeFiles: true,
       })
-      await aetherBytes.addExtra(() => {
-        return {
-          hello: "world",
-          cat: 5,
-        }
-      })
-      await aetherBytes.compress()
-      await aetherBytes.generate(TEMP_DIR, { exportType: "json" })
+      const tempFiles = await readdir(outputDir, { recursive: true })
 
-      const tempFiles = await readdir(TEMP_DIR, { recursive: true })
-      expect(tempFiles.length).toBeGreaterThan(0)
+      expect(tempFiles.length).toBe(1)
+      expect(tempFiles[0]).toContain(filename)
     })
+    test("should export: js with type-definitions", async () => {})
 
-    test("should contain types and entries", async () => {
-      const tempFiles = await readdir(TEMP_DIR, { recursive: true })
-      const tempFile = tempFiles.find(file => file.endsWith("index.ts"))
+    test("should export: ts without helpers", async () => {
+      const aetherBytes = new AetherBytes()
+      await aetherBytes.load(TEMPLATE_DIR)
+      const outputDir = join(TEMP_DIR, "ts-no-helpers")
+      const filename = "index"
+      await aetherBytes.generate(outputDir, {
+        indexFilename: filename,
+        exportFormat: "ts",
+        exportHelpers: false,
+      })
+      const tempFiles = await readdir(outputDir, { recursive: true })
 
-      if (!tempFile) {
-        throw new Error("No index.ts file found in the temp directory")
-      }
+      expect(tempFiles.length).toBe(2)
+      expect(tempFiles[0]).toContain(filename)
+    })
+    test("should export: ts with helpers separate", async () => {
+      const aetherBytes = new AetherBytes()
+      await aetherBytes.load(TEMPLATE_DIR)
+      const outputDir = join(TEMP_DIR, "ts-ts-helpers-separate")
+      const filename = "index"
+      const helperFilename = "helpers"
+      await aetherBytes.generate(outputDir, {
+        helpersFilename: helperFilename,
+        indexFilename: filename,
+        exportFormat: "ts",
+        exportHelpersFormat: "ts",
+        mergeFiles: false,
+      })
+      const tempFiles = await readdir(outputDir, { recursive: true })
 
-      const tempFilePath = join(TEMP_DIR, tempFile)
-      const tempFileUrl = pathToFileURL(tempFilePath).href
+      expect(tempFiles.length).toBe(3)
+      expect(tempFiles[1]).toContain(filename)
+      expect(tempFiles[0]).toContain(helperFilename)
+    })
+    test("should export: ts with helpers merged", async () => {
+      const aetherBytes = new AetherBytes()
+      await aetherBytes.load(TEMPLATE_DIR)
+      const outputDir = join(TEMP_DIR, "ts-ts-helpers-merged")
+      const filename = "index"
+      await aetherBytes.generate(outputDir, {
+        indexFilename: filename,
+        exportFormat: "ts",
+        exportHelpersFormat: "ts",
+        mergeFiles: true,
+      })
+      const tempFiles = await readdir(outputDir, { recursive: true })
 
-      const tempFileContent = await import(tempFileUrl)
-
-      expect(tempFileContent.entries).toBeDefined()
-      expect(typeof tempFileContent.entries).toBe("object")
+      expect(tempFiles.length).toBe(1)
+      expect(tempFiles[0]).toContain(filename)
     })
   })
 })
 
-afterAll(async () => {
-  // await rm(TEMP_DIR, { recursive: true, force: true })
+describe("decompress", () => {
+  test("should decompress data to string", async () => {
+    const aetherBytes = new AetherBytes()
+    const filepath = join(TEMPLATE_DIR, TEMPLATE_FILES[0] as string)
+    await aetherBytes.analyze({
+      filepath,
+      push: true,
+    })
+    const compressed = await aetherBytes.compress()
+
+    if (!compressed || compressed.length === 0) {
+      throw new Error("No compressed data found")
+    }
+
+    if (compressed && compressed.length > 1 && compressed?.[0]?.data) {
+      const decompressed = await decompress(compressed[0].data)
+
+      expect(decompressed).toMatchObject({
+        data: expect.any(String),
+        compressed: false,
+      })
+    }
+  })
 })

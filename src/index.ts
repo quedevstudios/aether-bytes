@@ -33,15 +33,9 @@ export interface LoadOptions {
   excludeExt?: string[]
 
   /**
-   * Encoding format to use when reading files.
-   * Defaults to `utf-8` if not specified.
+   * Whether to generate types for detected template variables.
    */
-  encoding?: BufferEncoding
-
-  /**
-   * Whether to enable compression for file storage.
-   */
-  compression?: boolean
+  genTypes?: boolean
 }
 
 /**
@@ -95,8 +89,16 @@ export class AetherBytes {
    * @param push - Whether to push the analyzed entry to the internal entries list.
    * @returns A promise that resolves to an {@link Entry} object with extracted information.
    */
-  public async analyze(filepath: string, push?: boolean): Promise<Entry> {
-    const entry = await analyze(filepath)
+  public async analyze({
+    filepath,
+    genTypes,
+    push = false,
+  }: {
+    filepath: string
+    genTypes?: boolean
+    push?: boolean
+  }): Promise<Entry> {
+    const entry = await analyze({ filepath, genTypes })
 
     this.emit("analyzed", { message: `Analyzed file ${filepath}`, entry })
 
@@ -198,7 +200,7 @@ export class AetherBytes {
 
     for (const file of files) {
       try {
-        await this.analyze(file, true)
+        await this.analyze({ filepath: file, genTypes: options?.genTypes, push: true })
 
         this.emit("loaded", { message: `Loaded file ${file}`, files: files.length })
       }
@@ -218,21 +220,25 @@ export class AetherBytes {
    *          compressed content and compression settings
    */
   public async compress(options?: CompressOptions): Promise <Entry[]> {
+    const files: Entry[] = []
+
     for (const entry of this.entries) {
       try {
         const compressedContent = await compressor(entry.content, options)
 
-        entry.data = compressedContent
-        entry.compressed = true
+        const newEntry = { ...entry, data: compressedContent, compressed: true }
+        files.push(newEntry)
 
-        this.emit("compression", { message: `Compressed file ${entry.path}`, data: entry.data })
+        this.emit("compression", { message: `Compressed file ${newEntry.path}`, data: newEntry.data })
       }
       catch (error) {
         this.emit("error", { message: `Error compressing file ${entry.path}`, error })
       }
     }
 
-    return this.entries
+    this.entries = files
+
+    return files
   }
 
   /**
@@ -243,6 +249,8 @@ export class AetherBytes {
    *          decompressed content
    */
   public async decompress(options?: DecompressOptions): Promise<Entry[]> {
+    const files: Entry[] = []
+
     for (const entry of this.entries) {
       try {
         if (!entry.data) {
@@ -251,17 +259,19 @@ export class AetherBytes {
 
         const decompressedContent = await decompressor(entry.data, options)
 
-        entry.data = decompressedContent
-        entry.compressed = false
+        const newEntry = { ...entry, data: decompressedContent, compressed: false }
+        files.push(newEntry)
 
-        this.emit("compression", { message: `Decompressed file ${entry.path}`, data: entry.data })
+        this.emit("compression", { message: `Decompressed file ${newEntry.path}`, data: newEntry.data })
       }
       catch (error) {
         this.emit("error", { message: `Error decompressing file ${entry.path}`, error })
       }
     }
 
-    return this.entries
+    this.entries = files
+
+    return files
   }
 
   /**
@@ -271,15 +281,19 @@ export class AetherBytes {
    * @returns A promise resolving to an array of loaded {@link Entry} objects with added extra metadata
    */
   public async modifyEntries(callback: ModifyCallback): Promise<Entry[]> {
+    const files: Entry[] = []
+
     for (const entry of this.entries) {
       const updatedEntry = await callback(entry)
 
       if (updatedEntry && Object.keys(updatedEntry).length > 0) {
-        Object.assign(entry, updatedEntry)
+        files.push({ ...entry, ...updatedEntry })
       }
     }
 
-    return this.entries
+    this.entries = files
+
+    return files
   }
 
   /**
@@ -289,15 +303,19 @@ export class AetherBytes {
    * @returns A promise resolving to an array of loaded {@link Entry} objects with added extra metadata
    */
   public async addExtra(callback: ExtraCallback): Promise<Entry[]> {
+    const files: Entry[] = []
+
     for (const entry of this.entries) {
       const extra = await callback(entry)
 
       if (extra && Object.keys(extra).length > 0) {
-        entry.extra = extra
+        files.push({ ...entry, extra })
       }
     }
 
-    return this.entries
+    this.entries = files
+
+    return files
   }
 
   /**
@@ -334,7 +352,7 @@ export class AetherBytes {
       }
     }
 
-    return this.files
+    return files
   }
 }
 

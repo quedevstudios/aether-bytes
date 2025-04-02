@@ -1,4 +1,5 @@
 import {
+  exists,
   readFile,
 } from "node:fs/promises"
 import { extname, sep } from "node:path"
@@ -7,9 +8,7 @@ import { extname, sep } from "node:path"
  * Represents the types of entries that can be extracted from a file's content.
  */
 export type EntryTypes =
-  | {
-    [key: string]: string
-  }
+  | Record<string, string>
   | undefined
 
 /**
@@ -31,18 +30,27 @@ export interface Entry {
   /** Optional processed data related to the file. */
   data?: string
   /** Optional extra metadata related to the file. */
-  extra?: {
-    [key: string]: string | number | boolean
-  }
+  extra?: Record<string, string | number | boolean>
 }
 
 /**
  * Analyzes a file and extracts metadata, content, and detected template variables.
  *
  * @param filepath - The path to the file to be analyzed.
+ * @param genTypes - Whether to generate types for detected template variables.
  * @returns A promise that resolves to an {@link Entry} object with extracted information.
  */
-export async function analyze(filepath: string): Promise<Entry> {
+export async function analyze({
+  filepath,
+  genTypes = true,
+}: {
+  filepath: string
+  genTypes?: boolean
+}): Promise<Entry> {
+  if (!await exists(filepath)) {
+    throw new Error(`File does not exist: ${filepath}`)
+  }
+
   const name = filepath.split(sep).pop()?.split(".")[0] || ""
   const ext = extname(filepath).slice(1)
   const path = filepath
@@ -64,7 +72,7 @@ export async function analyze(filepath: string): Promise<Entry> {
     ext,
     path,
     content,
-    types,
+    types: genTypes ? types : undefined,
     compressed,
   }
 }

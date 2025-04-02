@@ -5,13 +5,21 @@ import type { Entry } from "./analyzer"
  */
 export interface GeneratorOptions {
   /** The base filename for the generated files. Defaults to "index". */
-  filename?: string
+  indexFilename?: string
   /** The filename for the type definition file. Defaults to "index.d". */
   typesFilename?: string
+  /** The filename for the helper functions file. Defaults to "helpers". */
+  helpersFilename?: string
+  /** The filename for the JSON file. Defaults to "data". */
+  jsonFilename?: string
   /** The export format, either JavaScript ("js") or TypeScript ("ts"). Defaults to "ts". */
-  exportType?: "js" | "ts" | "json"
-  /** Whether to generate separate files for types and content. Defaults to `false`. */
-  splitFiles?: boolean
+  exportFormat?: "js" | "ts" | "json"
+  /** Whether to export helper functions. Defaults to true. */
+  exportHelpers?: boolean
+  /** The export format for the helpers file, either JavaScript ("js") or TypeScript ("ts"). Defaults to "ts". */
+  exportHelpersFormat?: "js" | "ts"
+  /** Whether to merge compatible files into a single file. Defaults to true. */
+  mergeFiles?: boolean
 }
 
 /**
@@ -50,43 +58,7 @@ function formatJsEntries(entries: Entry[]): string {
   }).join(",\n  ")
 }
 
-function exportJsObject(entries: Entry[]): string {
-  return `export const entries = new Map([
-  ${formatJsEntries(entries)}
-]);\n
-export function getEntry(key) {
-  return entries.get(key);
-}
-export function getEntries(filter) {
-  return Array.from(entries).filter(filter);
-}
-export function useEntry(key, options) {
-  /* Add functionality */
-  return entries.get(key);
-}`
-}
-
-function generateTypeMappings(entries: Entry[]): string {
-  return entries
-    .filter(entry => entry.types && Object.keys(entry.types).length > 0)
-    .map(entry => `export interface ${sanitizeTypeName(entry.name)} {
-${Object.entries(entry.types!)
-  .map(([key, value]) => `  ${key}: ${value};`)
-  .join("\n")}
-}`)
-    .join("\n\n")
-}
-
-function generateEntryTypeMap(entries: Entry[]): string {
-  const entryTypeMap = entries
-    .filter(entry => entry.types && Object.keys(entry.types).length > 0)
-    .map(entry => `"${entry.name}": ${sanitizeTypeName(entry.name)};`)
-    .join("\n  ")
-
-  return `export interface EntryMap {\n  ${entryTypeMap}\n}`
-}
-
-function generateEntryOptions(entries: Entry[]): string {
+function exportEntryOptions(entries: Entry[]): string {
   return `export type EntryOptions = ${entries.map(entry => `"${entry.name}"`).join(" | ")};`
 }
 
@@ -112,44 +84,126 @@ function generateEntryDataInterface(entries: Entry[]): string {
   return `export interface EntryData {\n  ${extraFields ? `${extraFields}\n  ` : ""}content: string;\n  compressed: boolean;\n}`
 }
 
-function exportTs(entries: Entry[], full: boolean): string {
-  const typeDefinitions = [
-    generateEntryOptions(entries),
-    generateEntryDataInterface(entries),
-    generateTypeMappings(entries),
-    generateEntryTypeMap(entries),
-  ].join("\n\n")
+function exportTypeMappings(entries: Entry[]): string {
+  return entries
+    .filter(entry => entry.types && Object.keys(entry.types).length)
+    .map((entry) => {
+      const typeFields = Object.entries(entry.types!)
+        .map(([key, value]) => `  ${key}: ${value};`)
+        .join("\n")
 
-  if (!full) {
-    return `${typeDefinitions}\n\ndeclare const entries: Map<EntryOptions, EntryData>;
-declare function getEntry(key: EntryOptions): EntryData | undefined;
-declare function getEntries(filter?: (entry: [EntryOptions, EntryData]) => boolean): [EntryOptions, EntryData][];
-declare function useEntry<K extends keyof EntryMap>(key: K | EntryOptions, options?: EntryMap[K]): any;`
+      return `export interface ${sanitizeTypeName(entry.name)} {\n${typeFields}\n}`
+    })
+    .join("\n\n")
+}
+
+function exportEntryTypeMap(entries: Entry[]): string {
+  const mappedEntries = entries
+    .filter(entry => entry.types && Object.keys(entry.types).length)
+    .map(entry => `"${entry.name}": ${sanitizeTypeName(entry.name)};`)
+    .join("\n  ")
+
+  return `export interface EntryMap {\n  ${mappedEntries || "  // No entries available"}\n}`
+}
+
+function exportIndex({
+  entries,
+  format,
+  merge,
+  typesFilename,
+}: {
+  entries: Entry[]
+  format: "js" | "ts"
+  merge: boolean
+  typesFilename: string
+}): string {
+  const exportImport = `import type { EntryData, EntryOptions } from './${typesFilename}';`
+
+  const exportEntries = `export const entries = new Map${format === "ts" ? "<EntryOptions, EntryData>" : ""}([
+  ${formatJsEntries(entries)}
+]);`
+
+  const exportChunks = [exportEntries]
+
+  if (!merge && format === "ts") {
+    exportChunks.unshift(exportImport)
   }
 
-  return `${typeDefinitions}\n\nexport const entries = new Map<EntryOptions, EntryData>([\n  ${formatJsEntries(entries)}\n]);
+  return exportChunks.join("\n\n")
+}
 
-export function getEntry(key: EntryOptions): EntryData | undefined {
+function exportHelperFunctions({
+  format,
+  merge,
+  indexFilename,
+  typesFilename,
+}: {
+  format: "js" | "ts"
+  merge: boolean
+  indexFilename: string
+  typesFilename: string
+}): string {
+  const exportImport = `${format === "ts" ? `import type { EntryData, EntryOptions, EntryMap } from './${typesFilename}';\n` : ""}import { entries } from './${indexFilename}';`
+
+  const exportGetEntry = `export function getEntry(key${format === "ts" ? ": EntryOptions" : ""})${format === "ts" ? ": EntryData | undefined" : ""} {
   return entries.get(key);
-}
-export function getEntries(filter?: (entry: [EntryOptions, EntryData]) => boolean): [EntryOptions, EntryData][] {
+}`
+
+  const exportGetEntries = `export function getEntries(filter${format === "ts" ? "?: (entry: [EntryOptions, EntryData]) => boolean" : ""})${format === "ts" ? ": [EntryOptions, EntryData][]" : ""} {
   return filter ? Array.from(entries).filter(filter) : Array.from(entries);
-}
-export function useEntry<K extends keyof EntryMap>(key: K | EntryOptions, options?: EntryMap[K]): any {
+}`
+
+  const exportUseEntry = `export function useEntry${format === "ts" ? "<K extends keyof EntryMap>" : ""}(key${format === "ts" ? ": K | EntryOptions" : ""}, options${format === "ts" ? "?: EntryMap[K]" : ""}) {
   /* Add functionality */
   return entries.get(key);
 }`
+
+  const exportChunks = [exportGetEntry, exportGetEntries, exportUseEntry]
+
+  if (!merge) {
+    exportChunks.unshift(exportImport)
+  }
+
+  return exportChunks.join("\n\n")
 }
 
-function exportJson(entries: Entry[]): string {
-  return JSON.stringify(
-    Object.fromEntries(entries.map((entry) => {
-      const extraFields = entry.extra ? { ...entry.extra } : {}
-      return [entry.name, { ...extraFields, content: entry.data ?? entry.content ?? "", compressed: entry.compressed }]
-    })),
-    null,
-    2,
+function exportJsonIndex(entries: Entry[]): string {
+  const mappedEntries = Object.fromEntries(
+    entries.map(({ name, extra = {}, data, content, compressed }) => [
+      name,
+      { ...extra, content: data ?? content ?? "", compressed },
+    ]),
   )
+
+  return JSON.stringify(mappedEntries, null, 2)
+}
+
+function exportJsonHelpers({
+  format,
+  jsonFilename,
+}: {
+  format: "js" | "ts"
+  jsonFilename: string
+}): string {
+  const exportGetEntry = `export async function getEntry(key${format === "ts" ? ": EntryOptions" : ""})${format === "ts" ? ": Promise<EntryData | undefined>" : ""} {
+  const jsonData = (await import("./${jsonFilename}.json", { assert: { type: "json" } })).default${format === "ts" ? " as unknown as [EntryOptions, EntryData][];" : ";"}
+  return jsonData.find(entry => entry[0] === key)?.[1];
+}`
+
+  const exportGetEntries = `export async function getEntries(filter${format === "ts" ? "?: (entry: [EntryOptions, EntryData]) => boolean" : ""})${format === "ts" ? ": Promise<[EntryOptions, EntryData][]>" : ""} {
+  const jsonData = (await import("./${jsonFilename}.json", { assert: { type: "json" } })).default${format === "ts" ? " as unknown as [EntryOptions, EntryData][];" : ";"}
+  return filter ? jsonData.filter(filter) : jsonData;
+}`
+
+  const exportUseEntry = `export async function useEntry${format === "ts" ? "<K extends keyof EntryMap>" : ""}(key${format === "ts" ? ": K | EntryOptions" : ""}, options${format === "ts" ? "?: EntryMap[K]" : ""}) {
+  const jsonData = (await import("./${jsonFilename}.json", { assert: { type: "json" } })).default${format === "ts" ? " as unknown as [EntryOptions, EntryData][];" : ";"}
+  /* Add functionality */
+  return jsonData.find(entry => entry[0] === key)?.[1];
+}`
+
+  const exportChunks = [exportGetEntry, exportGetEntries, exportUseEntry]
+
+  return exportChunks.join("\n\n")
 }
 
 /**
@@ -160,18 +214,104 @@ function exportJson(entries: Entry[]): string {
  * @returns An array of generated files.
  */
 export function generate(entries: Entry[], options: GeneratorOptions = {}): GeneratorFile[] {
-  const { filename = "index", typesFilename = "index.d", exportType = "ts", splitFiles = false } = options
+  const {
+    indexFilename = "index",
+    typesFilename = "index.d",
+    helpersFilename = "helpers",
+    jsonFilename = "data",
+    exportHelpers = true,
+    exportFormat = "ts",
+    exportHelpersFormat = "ts",
+    mergeFiles = false,
+  } = options
   const files: GeneratorFile[] = []
 
-  if (exportType === "json") {
-    files.push({ filename, ext: "json", content: exportJson(entries) })
-  }
-  else if (splitFiles && exportType === "ts") {
-    files.push({ filename, ext: "js", content: exportJsObject(entries) })
-    files.push({ filename: typesFilename, ext: "ts", content: exportTs(entries, false) })
+  if (exportFormat === "json") {
+    files.push({ filename: jsonFilename, ext: "json", content: exportJsonIndex(entries) })
+
+    const exportChunks = [exportJsonHelpers({ format: exportHelpersFormat, jsonFilename })]
+
+    if (exportHelpers) {
+      if (exportHelpersFormat === "ts") {
+        exportChunks.unshift(...[
+          exportEntryOptions(entries),
+          generateEntryDataInterface(entries),
+          exportTypeMappings(entries),
+          exportEntryTypeMap(entries),
+        ])
+
+        files.push({ filename: helpersFilename, ext: exportHelpersFormat, content: exportChunks.join("\n\n") })
+      }
+      else {
+        files.push({ filename: helpersFilename, ext: exportHelpersFormat, content: exportChunks.join("\n\n") })
+      }
+    }
   }
   else {
-    files.push({ filename, ext: exportType, content: exportType === "ts" ? exportTs(entries, true) : exportJsObject(entries) })
+    if (mergeFiles) {
+      const exportChunks = [exportIndex({
+        entries,
+        format: exportFormat,
+        merge: mergeFiles,
+        typesFilename,
+      })]
+
+      if (exportHelpers) {
+        exportChunks.push(exportHelperFunctions({
+          format: exportHelpersFormat,
+          merge: mergeFiles,
+          indexFilename,
+          typesFilename,
+        }))
+      }
+
+      if (exportFormat === "ts") {
+        exportChunks.unshift(...[
+          exportEntryOptions(entries),
+          generateEntryDataInterface(entries),
+          exportTypeMappings(entries),
+          exportEntryTypeMap(entries),
+        ])
+      }
+
+      files.push({ filename: indexFilename, ext: exportFormat, content: exportChunks.join("\n\n") })
+    }
+    else {
+      files.push({
+        filename: indexFilename,
+        ext: exportFormat,
+        content: exportIndex({
+          entries,
+          format: exportFormat,
+          merge: mergeFiles,
+          typesFilename,
+        }),
+      })
+
+      if (exportFormat === "ts") {
+        const exportChunks = [
+          exportEntryOptions(entries),
+          generateEntryDataInterface(entries),
+          exportTypeMappings(entries),
+          exportEntryTypeMap(entries),
+        ]
+
+        files.push({ filename: typesFilename, ext: exportFormat, content: exportChunks.join("\n\n") })
+      }
+
+      if (exportHelpers) {
+        files.push({
+          filename: helpersFilename,
+          ext: exportHelpersFormat,
+          content: exportHelperFunctions({
+            format: exportHelpersFormat,
+            merge: mergeFiles,
+            indexFilename,
+            typesFilename,
+          }),
+        })
+      }
+    }
   }
 
   return files

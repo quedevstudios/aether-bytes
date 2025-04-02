@@ -9,6 +9,7 @@ export default antfu({
   },
 
   rules: {
+    "jsdoc/check-param-names": "off",
     "node/prefer-global/buffer": "off",
   },
 })
