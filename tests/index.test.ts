@@ -191,8 +191,12 @@ describe("AetherBytes", () => {
       const tempFiles = await readdir(outputDir, { recursive: true })
 
       expect(tempFiles.length).toBe(2)
-      expect(tempFiles[0]).toContain(filename)
-      expect(tempFiles[1]).toContain(helperFilename)
+      expect(tempFiles).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(filename),
+          expect.stringContaining(helperFilename),
+        ]),
+      )
     })
     test("should export: json with ts helpers separate", async () => {
       const aetherBytes = new AetherBytes()
@@ -210,8 +214,12 @@ describe("AetherBytes", () => {
       const tempFiles = await readdir(outputDir, { recursive: true })
 
       expect(tempFiles.length).toBe(2)
-      expect(tempFiles[0]).toContain(filename)
-      expect(tempFiles[1]).toContain(helperFilename)
+      expect(tempFiles).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(filename),
+          expect.stringContaining(helperFilename),
+        ]),
+      )
     })
 
     test("should export: js without helpers", async () => {
@@ -245,8 +253,12 @@ describe("AetherBytes", () => {
       const tempFiles = await readdir(outputDir, { recursive: true })
 
       expect(tempFiles.length).toBe(2)
-      expect(tempFiles[1]).toContain(filename)
-      expect(tempFiles[0]).toContain(helperFilename)
+      expect(tempFiles).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(filename),
+          expect.stringContaining(helperFilename),
+        ]),
+      )
     })
     test("should export: js with helpers merged", async () => {
       const aetherBytes = new AetherBytes()
@@ -285,11 +297,13 @@ describe("AetherBytes", () => {
       const aetherBytes = new AetherBytes()
       await aetherBytes.load(TEMPLATE_DIR)
       const outputDir = join(TEMP_DIR, "ts-ts-helpers-separate")
-      const filename = "index"
-      const helperFilename = "helpers"
+      const indexFilename = "index"
+      const typesFilename = "index.d"
+      const helpersFilename = "helpers"
       await aetherBytes.generate(outputDir, {
-        helpersFilename: helperFilename,
-        indexFilename: filename,
+        helpersFilename,
+        indexFilename,
+        typesFilename,
         exportFormat: "ts",
         exportHelpersFormat: "ts",
         mergeFiles: false,
@@ -297,8 +311,13 @@ describe("AetherBytes", () => {
       const tempFiles = await readdir(outputDir, { recursive: true })
 
       expect(tempFiles.length).toBe(3)
-      expect(tempFiles[1]).toContain(filename)
-      expect(tempFiles[0]).toContain(helperFilename)
+      expect(tempFiles).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(indexFilename),
+          expect.stringContaining(helpersFilename),
+          expect.stringContaining(typesFilename),
+        ]),
+      )
     })
     test("should export: ts with helpers merged", async () => {
       const aetherBytes = new AetherBytes()
