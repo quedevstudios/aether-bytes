@@ -57,20 +57,22 @@
     "pako": "^2.1.0"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^4.10.1",
+    "@antfu/eslint-config": "^4.11.0",
     "@commitlint/cli": "^19.8.0",
     "@commitlint/config-conventional": "^19.8.0",
+    "@rollup/plugin-commonjs": "^28.0.3",
+    "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^12.1.2",
     "@semantic-release/git": "^10.0.1",
-    "@types/bun": "^1.2.5",
+    "@types/bun": "^1.2.8",
     "@types/pako": "^2.0.3",
-    "eslint": "^9.22.0",
+    "eslint": "^9.23.0",
     "lint-staged": "^15.5.0",
-    "rollup": "^4.36.0",
-    "rollup-plugin-dts": "^6.1.1",
+    "rollup": "^4.38.0",
+    "rollup-plugin-dts": "^6.2.1",
     "semantic-release": "^24.2.3",
-    "simple-git-hooks": "^2.11.1"
+    "simple-git-hooks": "^2.12.1"
   },
   "commitlint": {
     "extends": [

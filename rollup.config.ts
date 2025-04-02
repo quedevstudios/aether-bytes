@@ -1,3 +1,5 @@
+import pluginCommonJS from "@rollup/plugin-commonjs"
+import pluginResolve from "@rollup/plugin-node-resolve"
 import pluginTerser from "@rollup/plugin-terser"
 import pluginTypescript from "@rollup/plugin-typescript"
 import { defineConfig } from "rollup"
@@ -20,6 +22,8 @@ export default defineConfig([
     ],
     external: id => id.startsWith("node:"),
     plugins: [
+      pluginResolve(),
+      pluginCommonJS(),
       pluginTypescript(),
       pluginTerser(),
     ],
